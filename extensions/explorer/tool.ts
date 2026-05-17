@@ -6,16 +6,16 @@ import { registerExplorerUi, renderExplorerCall, renderExplorerResult, withExplo
 
 const EXPLORER_PARAMS = Type.Object({
 	query: Type.String({
-		description: "The specific question, pattern, or flow to explore in the codebase.",
+		description: "Focused codebase question or flow to trace.",
 	}),
 	context: Type.Optional(
 		Type.String({
-			description: "Relevant context, prior findings, errors, or constraints for the exploration.",
+			description: "Relevant findings, errors, constraints, or hypotheses.",
 		}),
 	),
 	paths: Type.Optional(
 		Type.Array(Type.String(), {
-			description: "Specific file paths or directories to focus the exploration on.",
+			description: "Files or directories to prioritize.",
 		}),
 	),
 });
@@ -39,13 +39,14 @@ export function registerExplorerTool(pi: ExtensionAPI, deps: ExplorerToolDeps) {
 		name: "explorer",
 		label: "Explorer",
 		description:
-			"Explore the codebase using a read-only explorer agent. Use for tracing data flows, finding where something is defined or used, understanding project structure, locating hidden dependencies, or answering 'where is X' / 'how does Y work' questions. Findings are returned directly to you — the user sees only the progress widget, not the output.",
-		promptSnippet: "Explore the codebase to find, trace, and understand. Findings are returned directly to you.",
+			"Read-only codebase exploration for tracing flows, multi-file reviews, definitions/usages, structure, and hidden dependencies. Best when the question spans multiple files. Returns findings to you.",
+		promptSnippet:
+			"Use for read-only codebase investigation across files. Ask a focused query; include paths or context when helpful.",
 		promptGuidelines: [
-			"Use explorer to trace data flows, find definitions, understand project structure, or answer questions about how the codebase works.",
-			"Avoid explorer for simple file reads you can do directly, or for tasks that require writing code.",
-			"When using explorer, ask a focused, specific query and include relevant paths or context.",
-			"Explorer findings come back to you as tool output — act on them directly without restating them to the user.",
+			"Prefer explorer when the answer likely requires tracing across files or investigating non-obvious behavior.",
+			"Avoid it for simple reads you can do directly or any task that needs edits.",
+			"Provide a focused query; add relevant paths, errors, or prior findings.",
+			"Use the findings to answer or act; do not paste the raw output to the user.",
 		],
 		parameters: EXPLORER_PARAMS,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {

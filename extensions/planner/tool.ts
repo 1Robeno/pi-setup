@@ -5,7 +5,7 @@ import { registerPlannerUi, renderPlannerCall, renderPlannerResult, withPlannerU
 
 const PLANNER_PARAMS = Type.Object({
 	task: Type.String({
-		description: "Clear description of what the user wants planned. Be specific about the goal and scope.",
+		description: "Planning request with goal, scope, constraints, and any important files.",
 	}),
 });
 
@@ -71,12 +71,13 @@ export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 		name: "planner",
 		label: "Planner",
 		description:
-			"Generate a detailed markdown plan. Reads the full session context automatically and writes the plan to .docs/plans/. Use when the user asks to plan, design, or architect something non-trivial.",
-		promptSnippet: "Generate a detailed plan for the user's goal. Pass a clear task description and key files — full session context is read automatically.",
+			"Write a markdown implementation plan to `.docs/plans/`. Reads the current session automatically. Use when the user wants a written plan, design doc, or architecture breakdown.",
+		promptSnippet:
+			"Create a markdown plan from the current session. Pass the goal, scope, constraints, and any important files.",
 		promptGuidelines: [
-			"Use planner when the user asks for a plan, design document, or architecture breakdown.",
-			"Pass a focused task description. The planner reads the full session context on its own.",
-			"After the planner completes, tell the user the plan was saved and where.",
+			"Use planner when the plan itself is the deliverable.",
+			"Pass a focused task with the goal, scope, constraints, and any important files.",
+			"Do not repeat session history; full session context is read automatically.",
 		],
 		parameters: PLANNER_PARAMS,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
