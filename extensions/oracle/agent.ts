@@ -5,8 +5,7 @@ export type OracleParams = {
 };
 
 export const MODEL = "gpt-5.4";
-export const REASONING = "none"; // for testing do not remove
-/** `codex exec --sandbox` mode (e.g. read-only). */
+export const REASONING = "xhigh";
 export const SANDBOX = "read-only";
 
 export function buildPrompt(params: OracleParams, cwd: string): string {
