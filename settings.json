@@ -2,7 +2,7 @@
   "lastChangelogVersion": "0.75.0",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "low",
   "theme": "dark",
   "enableInstallTelemetry": false,
   "enabledModels": []

@@ -15,7 +15,6 @@ extensions/
   planner/         — Codex (gpt-5.5, high reasoning) to write structured plans to disk
   exa/             — Web search and fetch tools via the Exa API
   minimal/         — Compact footer: context gauge + model + thinking level
-  model-thinking-picker.ts — /thinking command and Ctrl+Shift+L TUI picker
 settings.json      — Pi settings (provider, model, theme)
 AGENTS.md          — Standing instructions injected into every session
 ```
@@ -84,16 +83,6 @@ A compact terminal footer that renders a 10-block context usage gauge, the activ
 Load with: pi -e extensions/minimal
 ```
 
-### model-thinking-picker
-
-Adds a `/thinking` command and a `Ctrl+Shift+L` shortcut that open an interactive TUI picker for switching thinking levels (off → minimal → low → medium → high → xhigh).
-
-```
-Load with: pi -e extensions/model-thinking-picker.ts
-```
-
----
-
 ## Setup
 
 **Prerequisites**: Pi coding agent, `bun`, `codex` CLI, Cursor `agent` CLI, `EXA_API_KEY`.
@@ -107,7 +96,7 @@ git clone <repo-url> ~/.pi/agent
 Load extensions at startup:
 
 ```sh
-pi -e extensions/oracle -e extensions/explorer -e extensions/planner -e extensions/exa -e extensions/minimal -e extensions/model-thinking-picker.ts
+pi -e extensions/oracle -e extensions/explorer -e extensions/planner -e extensions/exa -e extensions/minimal
 ```
 
 Or add them to your Pi launch alias/config.
