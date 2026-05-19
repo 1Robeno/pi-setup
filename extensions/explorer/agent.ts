@@ -4,7 +4,7 @@ export type ExplorerParams = {
 	paths?: string[];
 };
 
-export const MODEL = "composer-2-fast";
+export const MODEL = "composer-2.5-fast";
 
 export function buildPrompt(params: ExplorerParams, cwd: string): string {
 	const paths = params.paths?.filter(Boolean) ?? [];

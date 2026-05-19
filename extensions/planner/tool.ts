@@ -7,6 +7,9 @@ const PLANNER_PARAMS = Type.Object({
 	task: Type.String({
 		description: "Planning request with goal, scope, constraints, and any important files.",
 	}),
+	title: Type.Optional(Type.String({
+		description: "Short, subject-specific plan title used for the filename, e.g. 'auth-migration' or 'dashboard-redesign'.",
+	})),
 });
 
 type PlannerToolDeps = {
@@ -53,15 +56,29 @@ function serializeSession(ctx: any): string {
 		.join("\n\n---\n\n");
 }
 
-function generatePlanPath(task: string): string {
-	const now = new Date();
-	const mmdd = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-	const slug = task
+const FALLBACK_WORDS = [
+	"amber", "brisk", "clear", "delta", "ember", "frost", "harbor", "lunar",
+	"maple", "nova", "onyx", "prairie", "quartz", "river", "signal", "summit",
+];
+
+function randomFallbackSlug(): string {
+	return Array.from({ length: 3 }, () => FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]).join("-");
+}
+
+function slugify(text: string): string {
+	return text
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "")
-		.slice(0, 35);
-	return `.docs/plans/${mmdd}_${slug}.md`;
+		.slice(0, 35)
+		.replace(/-+$/g, "");
+}
+
+function generatePlanPath(title?: string): string {
+	const now = new Date();
+	const mmdd = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+	const slug = title ? slugify(title) : randomFallbackSlug();
+	return `.docs/plans/${mmdd}_${slug || randomFallbackSlug()}.md`;
 }
 
 export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
@@ -71,12 +88,13 @@ export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 		name: "planner",
 		label: "Planner",
 		description:
-			"Write a markdown implementation plan to `.docs/plans/`. Reads the current session automatically. Use when the user wants a written plan, design doc, or architecture breakdown.",
+			"Write an implementation plan to `.docs/plans/`. Reads the current session automatically. Use when the user wants a written plan, design doc, or architecture breakdown.",
 		promptSnippet:
-			"Create a markdown plan from the current session. Pass the goal, scope, constraints, and any important files.",
+			"Create a plan from the current session. Pass the goal, scope, constraints, important files, and a short subject-specific title for the filename.",
 		promptGuidelines: [
 			"Use planner when the plan itself is the deliverable.",
 			"Pass a focused task with the goal, scope, constraints, and any important files.",
+			"Pass a short subject-specific title for the filename, e.g. 'auth-migration' or 'dashboard-redesign'.",
 			"Do not repeat session history; full session context is read automatically.",
 		],
 		parameters: PLANNER_PARAMS,
@@ -84,7 +102,7 @@ export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 			return await withPlannerUi(ctx, params.task, deps.formatDuration, async (ui) => {
 				try {
 					const sessionContext = serializeSession(ctx);
-					const planPath = generatePlanPath(params.task);
+					const planPath = generatePlanPath(params.title);
 
 					const result = await deps.runCodexPlanner(
 						sessionContext,

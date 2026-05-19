@@ -1,5 +1,6 @@
 export type PlannerParams = {
 	task: string;
+	title?: string;
 };
 
 export const MODEL = "gpt-5.5";

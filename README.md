@@ -11,7 +11,7 @@ Shared publicly as a reference. Take whatever's useful.
 ```
 extensions/
   oracle/          — Codex (gpt-5.4, xhigh reasoning) as a read-only second opinion
-  explorer/        — Cursor agent (composer-2-fast) for deep codebase navigation
+  explorer/        — Cursor agent (composer-2.5-fast) for deep codebase navigation
   planner/         — Codex (gpt-5.5, high reasoning) to write structured plans to disk
   exa/             — Web search and fetch tools via the Exa API
   minimal/         — Compact footer: context gauge + model + thinking level
@@ -43,7 +43,7 @@ Invokes the Cursor `agent` CLI for codebase navigation tasks — tracing call st
 The explorer runs shell commands freely (`rg`, `fd`, `git log`, `git blame`, etc.) and returns dense, precise output (file paths, line numbers, quotes) back to Pi. It never writes files.
 
 ```
-Model:     composer-2-fast
+Model:     composer-2.5-fast
 Sandbox:   read-only (by instruction)
 Load with: pi -e extensions/explorer
 ```
