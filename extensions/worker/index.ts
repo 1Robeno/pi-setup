@@ -1,9 +1,9 @@
 /**
- * Editor — /sub, /subcont, /subrm, /subclear with live widgets
+ * Worker — /worker, /workercont, /workerrm, /workerclear with live widgets
  *
- * Spawns background Pi SDK editor agents (no external coding CLI). Each agent has a
- * persistent Pi session, can read/search/edit/write files, and reports completion
- * back to the main model as a follow-up message.
+ * Spawns background Pi SDK worker agents (no external coding CLI). Each worker has a
+ * persistent Pi session, can use coding tools plus selected utility tools, and reports
+ * completion back to the main model as a follow-up message.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -48,23 +48,25 @@ interface Snapshot {
 	agents: PersistedSubState[];
 }
 
-const CUSTOM_STATE_TYPE = "native-subagent-state";
-const CUSTOM_RESULT_TYPE = "native-subagent-result";
-const SUBAGENT_MODEL_ID = "gpt-5.5";
-const SUBAGENT_THINKING = "low";
-const SUBAGENT_TOOLS = ["read", "edit", "write", "grep", "find", "ls"];
+const CUSTOM_STATE_TYPE = "native-worker-state";
+const CUSTOM_RESULT_TYPE = "native-worker-result";
+const WORKER_MODEL_ID = "gpt-5.5";
+const WORKER_THINKING = "medium";
+const WORKER_EXTENSION_PATHS = [path.join(getAgentDir(), "extensions", "exa")];
+const WORKER_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls", "exa_search", "exa_code", "exa_fetch"];
 
-const SUBAGENT_SYSTEM_APPEND = `You are an editor background subagent delegated by the main model.
+const WORKER_SYSTEM_APPEND = `You are a worker background agent delegated by the main model.
 
 Your job:
-- Complete the delegated coding task directly in the current working directory.
-- You may read, search, edit, and write files.
+- Complete the delegated task directly in the current working directory.
+- You may inspect, search, edit, write, run bash commands, and use web/code search tools when they are available.
+- Keep changes scoped to the task. Prefer surgical edits and avoid broad rewrites unless requested.
+- Use bash responsibly: inspect first, run relevant checks when practical, and avoid destructive commands unless explicitly necessary.
 - Do not ask the user questions unless the task is impossible without clarification.
-- Keep your final response concise: list files changed and anything the main model must know.
-- You do not have bash. Use read, edit, write, grep, find, and ls only.`;
+- Keep your final response concise: list files changed, checks run, and anything the main model must know.`;
 
 function makeSubagentSessionDir(): string {
-	return path.join(os.homedir(), ".pi", "agent", "sessions", "native-subagents");
+	return path.join(os.homedir(), ".pi", "agent", "sessions", "native-workers");
 }
 
 function toPersisted(state: SubState): PersistedSubState {
@@ -97,9 +99,9 @@ function extractMessageText(message: any): string {
 
 function resolveSubagentModel(ctx: ExtensionContext): Model<any> | undefined {
 	return (
-		ctx.modelRegistry.find("openai-codex", SUBAGENT_MODEL_ID) ??
-		ctx.modelRegistry.find("openai", SUBAGENT_MODEL_ID) ??
-		ctx.modelRegistry.getAll().find((model) => model.id === SUBAGENT_MODEL_ID)
+		ctx.modelRegistry.find("openai-codex", WORKER_MODEL_ID) ??
+		ctx.modelRegistry.find("openai", WORKER_MODEL_ID) ??
+		ctx.modelRegistry.getAll().find((model) => model.id === WORKER_MODEL_ID)
 	);
 }
 
@@ -114,7 +116,7 @@ function restoreSnapshot(ctx: ExtensionContext): Snapshot | undefined {
 }
 
 function widgetKey(id: number): string {
-	return `editor-${id}`;
+	return `worker-${id}`;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -165,7 +167,7 @@ export default function (pi: ExtensionAPI) {
 						const taskPreview = state.task.length > 48 ? `${state.task.slice(0, 45)}...` : state.task;
 						const turnLabel = state.turnCount > 1 ? theme.fg("dim", ` · Turn ${state.turnCount}`) : "";
 						const seconds = Math.round(state.elapsed / 1000);
-						const header = theme.fg(statusColor, `${statusIcon} Editor #${state.id}`) +
+						const header = theme.fg(statusColor, `${statusIcon} Worker #${state.id}`) +
 							turnLabel +
 							theme.fg("dim", `  ${taskPreview}`) +
 							theme.fg("dim", `  (${seconds}s)`) +
@@ -198,16 +200,17 @@ export default function (pi: ExtensionAPI) {
 
 	async function createSdkSession(state: SubState, ctx: ExtensionContext): Promise<NativeAgentSession> {
 		const model = resolveSubagentModel(ctx);
-		if (!model) throw new Error(`Could not find model ${SUBAGENT_MODEL_ID}. Check Pi model configuration.`);
+		if (!model) throw new Error(`Could not find model ${WORKER_MODEL_ID}. Check Pi model configuration.`);
 
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: ctx.cwd,
 			agentDir: getAgentDir(),
+			additionalExtensionPaths: WORKER_EXTENSION_PATHS,
 			noExtensions: true,
 			noSkills: true,
 			noPromptTemplates: true,
 			noThemes: true,
-			appendSystemPrompt: [SUBAGENT_SYSTEM_APPEND],
+			appendSystemPrompt: [WORKER_SYSTEM_APPEND],
 		});
 		await resourceLoader.reload();
 
@@ -219,11 +222,11 @@ export default function (pi: ExtensionAPI) {
 			cwd: ctx.cwd,
 			agentDir: getAgentDir(),
 			model,
-			thinkingLevel: SUBAGENT_THINKING,
+			thinkingLevel: WORKER_THINKING,
 			authStorage: ctx.modelRegistry.authStorage,
 			modelRegistry: ctx.modelRegistry,
 			resourceLoader,
-			tools: SUBAGENT_TOOLS,
+			tools: WORKER_TOOLS,
 			sessionManager,
 		});
 
@@ -290,14 +293,14 @@ export default function (pi: ExtensionAPI) {
 				const result = state.lastText || state.textChunks.join("") || "(no text response)";
 				const statusLabel = state.status === "done" ? "finished" : state.status;
 				ctx.ui.notify(
-					`Editor #${state.id} ${statusLabel} in ${Math.round(state.elapsed / 1000)}s`,
+					`Worker #${state.id} ${statusLabel} in ${Math.round(state.elapsed / 1000)}s`,
 					state.status === "done" ? "success" : state.status === "interrupted" ? "warning" : "error",
 				);
 
 				try {
 					pi.sendMessage({
 						customType: CUSTOM_RESULT_TYPE,
-						content: `Editor #${state.id}${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} ${statusLabel} task:\n${prompt}\n\nSession: ${state.sessionFile}\nTools used: ${state.toolCount}\nElapsed: ${Math.round(state.elapsed / 1000)}s\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
+						content: `Worker #${state.id}${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} ${statusLabel} task:\n${prompt}\n\nSession: ${state.sessionFile}\nTools used: ${state.toolCount}\nElapsed: ${Math.round(state.elapsed / 1000)}s\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
 						display: true,
 						details: toPersisted(state),
 					}, { deliverAs: "followUp", triggerTurn: true });
@@ -338,7 +341,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function listAgents(): string {
-		if (agents.size === 0) return "No editor agents.";
+		if (agents.size === 0) return "No worker agents.";
 		return Array.from(agents.values())
 			.map((s) => `#${s.id} [${s.status.toUpperCase()}] (Turn ${s.turnCount}) - ${s.task}\n  session: ${s.sessionFile || "pending"}`)
 			.join("\n");
@@ -346,22 +349,22 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_create",
-		label: "Editor Subagent Create",
-		description: "Spawn an editor subagent: a native Pi background agent for medium-to-large code edits, refactors, and implementation work. It can read, search, edit, and write files. Returns immediately; the result is delivered as a follow-up message.",
-		promptSnippet: "Spawn an editor subagent for medium-to-large code changes, refactors, and independent implementation work silos",
+		label: "Worker Create",
+		description: "Spawn a worker subagent: a native Pi background agent for medium-to-large execution tasks. It can read, search, run bash, edit/write files, and use web/code search tools when available. Returns immediately; the result is delivered as a follow-up message.",
+		promptSnippet: "Spawn a worker subagent for medium-to-large code changes, research-backed implementation, refactors, tests, or independent execution work silos",
 		promptGuidelines: [
-			"Use subagent_create as an editor subagent when medium-to-large code changes, refactors, migrations, test additions, or multi-file implementation work can be delegated.",
-			"Use subagent_create to develop independent work silos in parallel. Spawn multiple editor subagents when tasks can be split cleanly by file, component, feature, or concern.",
-			"Give each subagent a complete, bounded task with target files, constraints, and expected output. Avoid overlapping edits across subagents unless coordination is explicit.",
-			"Do not use subagent_create for simple read-only investigation or tiny edits; use direct tools or explorer instead.",
+			"Use subagent_create as a worker subagent when medium-to-large code changes, refactors, migrations, test additions, research-backed implementation, or other execution work can be delegated.",
+			"Use subagent_create to develop independent work silos in parallel. Spawn multiple workers when tasks can be split cleanly by file, component, feature, or concern.",
+			"Give each worker a complete, bounded task with target files, constraints, expected output, and verification expectations. Avoid overlapping edits across workers unless coordination is explicit.",
+			"Do not use subagent_create for simple read-only investigation or tiny edits; use direct bash or explorer instead.",
 		],
 		parameters: Type.Object({
-			task: Type.String({ description: "Complete task description for the subagent" }),
+			task: Type.String({ description: "Complete task description for the worker" }),
 		}),
 		execute: async (_callId, args, _signal, _onUpdate, ctx) => {
 			const state = startAgent(args.task, ctx);
 			return {
-				content: [{ type: "text", text: `Editor #${state.id} spawned with ${SUBAGENT_MODEL_ID}:${SUBAGENT_THINKING}. It can use ${SUBAGENT_TOOLS.join(", ")}.` }],
+				content: [{ type: "text", text: `Worker #${state.id} spawned with ${WORKER_MODEL_ID}:${WORKER_THINKING}. It can use ${WORKER_TOOLS.join(", ")}.` }],
 				details: toPersisted(state),
 			};
 		},
@@ -369,22 +372,22 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_continue",
-		label: "Editor Subagent Continue",
-		description: "Continue an existing editor subagent conversation using its persistent session. Use this for follow-up edits, fixes, or review after a subagent finishes. Returns immediately; the result is delivered as a follow-up message.",
-		promptSnippet: "Continue an existing editor subagent by ID for follow-up edits or refinement",
-		promptGuidelines: ["Use subagent_continue to give follow-up instructions to an existing editor subagent after it finishes, especially for fixes, refinements, or additional edits in the same work silo."],
+		label: "Worker Continue",
+		description: "Continue an existing worker conversation using its persistent session. Use this for follow-up edits, fixes, research, or review after a worker finishes. Returns immediately; the result is delivered as a follow-up message.",
+		promptSnippet: "Continue an existing worker by ID for follow-up execution, edits, research, or refinement",
+		promptGuidelines: ["Use subagent_continue to give follow-up instructions to an existing worker after it finishes, especially for fixes, refinements, or additional edits in the same work silo."],
 		parameters: Type.Object({
-			id: Type.Number({ description: "Subagent ID" }),
+			id: Type.Number({ description: "Worker ID" }),
 			prompt: Type.String({ description: "Follow-up prompt or new instructions" }),
 		}),
 		execute: async (_callId, args, _signal, _onUpdate, ctx) => {
 			const state = agents.get(args.id);
-			if (!state) return { content: [{ type: "text", text: `Error: No editor agent #${args.id} found.` }] };
-			if (state.status === "running") return { content: [{ type: "text", text: `Error: Editor #${args.id} is still running.` }] };
+			if (!state) return { content: [{ type: "text", text: `Error: No worker #${args.id} found.` }] };
+			if (state.status === "running") return { content: [{ type: "text", text: `Error: Worker #${args.id} is still running.` }] };
 			state.turnCount++;
 			startAgent(args.prompt, ctx, state);
 			return {
-				content: [{ type: "text", text: `Editor #${args.id} continuing in background.` }],
+				content: [{ type: "text", text: `Worker #${args.id} continuing in background.` }],
 				details: toPersisted(state),
 			};
 		},
@@ -392,100 +395,144 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_remove",
-		label: "Editor Remove",
-		description: "Remove an editor agent from the widget list. If it is running, abort it first.",
+		label: "Worker Remove",
+		description: "Remove a worker from the widget list. If it is running, abort it first.",
 		parameters: Type.Object({
-			id: Type.Number({ description: "Subagent ID" }),
+			id: Type.Number({ description: "Worker ID" }),
 		}),
 		execute: async (_callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;
 			const state = agents.get(args.id);
-			if (!state) return { content: [{ type: "text", text: `Error: No editor agent #${args.id} found.` }] };
+			if (!state) return { content: [{ type: "text", text: `Error: No worker #${args.id} found.` }] };
 			if (state.status === "running") await stopAgent(state);
 			ctx.ui.setWidget(widgetKey(args.id), undefined);
 			agents.delete(args.id);
 			persistSnapshot();
-			return { content: [{ type: "text", text: `Editor #${args.id} removed.` }] };
+			return { content: [{ type: "text", text: `Worker #${args.id} removed.` }] };
 		},
 	});
 
 	pi.registerTool({
 		name: "subagent_list",
-		label: "Editor List",
-		description: "List active and finished editor agents with IDs, tasks, status, and session files.",
+		label: "Worker List",
+		description: "List active and finished workers with IDs, tasks, status, and session files.",
 		parameters: Type.Object({}),
 		execute: async () => ({ content: [{ type: "text", text: listAgents() }] }),
 	});
 
-	pi.registerCommand("sub", {
-		description: "Spawn an editor agent with live widget: /sub <task>",
-		handler: async (args, ctx) => {
-			const task = args?.trim();
-			if (!task) return ctx.ui.notify("Usage: /sub <task>", "error");
-			const state = startAgent(task, ctx);
-			ctx.ui.notify(`Editor #${state.id} started.`, "info");
+	async function startWorkerFromCommand(args: string | undefined, ctx: ExtensionContext, command: string) {
+		const task = args?.trim();
+		if (!task) return ctx.ui.notify(`Usage: /${command} <task>`, "error");
+		const state = startAgent(task, ctx);
+		ctx.ui.notify(`Worker #${state.id} started.`, "info");
+	}
+
+	async function continueWorkerFromCommand(args: string | undefined, ctx: ExtensionContext, command: string) {
+		widgetCtx = ctx;
+		const trimmed = args?.trim() ?? "";
+		const spaceIdx = trimmed.indexOf(" ");
+		if (spaceIdx === -1) return ctx.ui.notify(`Usage: /${command} <number> <prompt>`, "error");
+
+		const id = parseInt(trimmed.slice(0, spaceIdx), 10);
+		const prompt = trimmed.slice(spaceIdx + 1).trim();
+		if (Number.isNaN(id) || !prompt) return ctx.ui.notify(`Usage: /${command} <number> <prompt>`, "error");
+
+		const state = agents.get(id);
+		if (!state) return ctx.ui.notify(`No worker #${id} found.`, "error");
+		if (state.status === "running") return ctx.ui.notify(`Worker #${id} is still running.`, "warning");
+
+		state.turnCount++;
+		startAgent(prompt, ctx, state);
+		ctx.ui.notify(`Continuing worker #${id} (Turn ${state.turnCount}).`, "info");
+	}
+
+	async function removeWorkerFromCommand(args: string | undefined, ctx: ExtensionContext, command: string) {
+		widgetCtx = ctx;
+		const id = parseInt(args?.trim() ?? "", 10);
+		if (Number.isNaN(id)) return ctx.ui.notify(`Usage: /${command} <number>`, "error");
+
+		const state = agents.get(id);
+		if (!state) return ctx.ui.notify(`No worker #${id} found.`, "error");
+		if (state.status === "running") await stopAgent(state);
+		ctx.ui.setWidget(widgetKey(id), undefined);
+		agents.delete(id);
+		persistSnapshot();
+		ctx.ui.notify(`Worker #${id} removed.`, "info");
+	}
+
+	async function clearWorkersFromCommand(_args: string | undefined, ctx: ExtensionContext) {
+		widgetCtx = ctx;
+		let interrupted = 0;
+		for (const [id, state] of Array.from(agents.entries())) {
+			if (state.status === "running") {
+				await stopAgent(state);
+				interrupted++;
+			}
+			ctx.ui.setWidget(widgetKey(id), undefined);
+		}
+		const total = agents.size;
+		agents.clear();
+		nextId = 1;
+		persistSnapshot();
+		ctx.ui.notify(
+			total === 0 ? "No workers to clear." : `Cleared ${total} worker${total === 1 ? "" : "s"}${interrupted ? ` (${interrupted} interrupted)` : ""}.`,
+			total === 0 ? "info" : "success",
+		);
+	}
+
+	pi.registerCommand("worker", {
+		description: "Spawn a worker with live widget: /worker <task>",
+		handler: async (args, ctx) => startWorkerFromCommand(args, ctx, "worker"),
+	});
+
+	pi.registerCommand("workercont", {
+		description: "Continue an existing worker: /workercont <number> <prompt>",
+		handler: async (args, ctx) => continueWorkerFromCommand(args, ctx, "workercont"),
+	});
+
+	pi.registerCommand("workerrm", {
+		description: "Remove a worker widget: /workerrm <number>",
+		handler: async (args, ctx) => removeWorkerFromCommand(args, ctx, "workerrm"),
+	});
+
+	pi.registerCommand("workerclear", {
+		description: "Clear all worker widgets",
+		handler: async (args, ctx) => clearWorkersFromCommand(args, ctx),
+	});
+
+	pi.registerCommand("workers", {
+		description: "List active and finished workers",
+		handler: async (_args, ctx) => {
+			widgetCtx = ctx;
+			ctx.ui.notify(listAgents(), "info");
 		},
+	});
+
+	pi.registerCommand("sub", {
+		description: "Alias for /worker",
+		handler: async (args, ctx) => startWorkerFromCommand(args, ctx, "sub"),
 	});
 
 	pi.registerCommand("subcont", {
-		description: "Continue an existing editor agent: /subcont <number> <prompt>",
-		handler: async (args, ctx) => {
-			widgetCtx = ctx;
-			const trimmed = args?.trim() ?? "";
-			const spaceIdx = trimmed.indexOf(" ");
-			if (spaceIdx === -1) return ctx.ui.notify("Usage: /subcont <number> <prompt>", "error");
-
-			const id = parseInt(trimmed.slice(0, spaceIdx), 10);
-			const prompt = trimmed.slice(spaceIdx + 1).trim();
-			if (Number.isNaN(id) || !prompt) return ctx.ui.notify("Usage: /subcont <number> <prompt>", "error");
-
-			const state = agents.get(id);
-			if (!state) return ctx.ui.notify(`No editor agent #${id} found.`, "error");
-			if (state.status === "running") return ctx.ui.notify(`Editor #${id} is still running.`, "warning");
-
-			state.turnCount++;
-			startAgent(prompt, ctx, state);
-			ctx.ui.notify(`Continuing editor agent #${id} (Turn ${state.turnCount}).`, "info");
-		},
+		description: "Alias for /workercont",
+		handler: async (args, ctx) => continueWorkerFromCommand(args, ctx, "subcont"),
 	});
 
 	pi.registerCommand("subrm", {
-		description: "Remove an editor agent widget: /subrm <number>",
-		handler: async (args, ctx) => {
-			widgetCtx = ctx;
-			const id = parseInt(args?.trim() ?? "", 10);
-			if (Number.isNaN(id)) return ctx.ui.notify("Usage: /subrm <number>", "error");
-
-			const state = agents.get(id);
-			if (!state) return ctx.ui.notify(`No editor agent #${id} found.`, "error");
-			if (state.status === "running") await stopAgent(state);
-			ctx.ui.setWidget(widgetKey(id), undefined);
-			agents.delete(id);
-			persistSnapshot();
-			ctx.ui.notify(`Editor #${id} removed.`, "info");
-		},
+		description: "Alias for /workerrm",
+		handler: async (args, ctx) => removeWorkerFromCommand(args, ctx, "subrm"),
 	});
 
 	pi.registerCommand("subclear", {
-		description: "Clear all editor agent widgets",
+		description: "Alias for /workerclear",
+		handler: async (args, ctx) => clearWorkersFromCommand(args, ctx),
+	});
+
+	pi.registerCommand("sublist", {
+		description: "Alias for /workers",
 		handler: async (_args, ctx) => {
 			widgetCtx = ctx;
-			let interrupted = 0;
-			for (const [id, state] of Array.from(agents.entries())) {
-				if (state.status === "running") {
-					await stopAgent(state);
-					interrupted++;
-				}
-				ctx.ui.setWidget(widgetKey(id), undefined);
-			}
-			const total = agents.size;
-			agents.clear();
-			nextId = 1;
-			persistSnapshot();
-			ctx.ui.notify(
-				total === 0 ? "No editor agents to clear." : `Cleared ${total} editor agent${total === 1 ? "" : "s"}${interrupted ? ` (${interrupted} interrupted)` : ""}.`,
-				total === 0 ? "info" : "success",
-			);
+			ctx.ui.notify(listAgents(), "info");
 		},
 	});
 
@@ -509,7 +556,7 @@ export default function (pi: ExtensionAPI) {
 				agents.set(item.id, {
 					...item,
 					status: restoredStatus,
-					lastText: item.lastText || (item.status === "running" ? "Restored after restart/reload. Use /subcont to continue." : ""),
+					lastText: item.lastText || (item.status === "running" ? "Restored after restart/reload. Use /workercont to continue." : ""),
 					textChunks: [],
 				});
 			}
@@ -523,7 +570,7 @@ export default function (pi: ExtensionAPI) {
 		for (const [id, state] of Array.from(agents.entries())) {
 			if (state.status === "running") {
 				state.status = "interrupted";
-				state.lastText = state.lastText || "Interrupted by session shutdown/reload. Use /subcont to continue.";
+				state.lastText = state.lastText || "Interrupted by session shutdown/reload. Use /workercont to continue.";
 				await stopAgent(state, "interrupted");
 			}
 			ctx.ui.setWidget(widgetKey(id), undefined);

@@ -27,12 +27,14 @@ export const THEME_MAP: Record<string, string> = {
 	"coms-net":           "ocean-breeze",     // peer-to-peer messaging, cross-boundary
 	"cross-agent":        "ocean-breeze",     // cross-boundary, connecting
 	"damage-control":     "gruvbox",          // grounded, earthy safety
+	"director":           "midnight-ocean",   // verifier/delegator mode
 	"minimal":            "synthwave",        // synthwave by default now!
 	"pi-pi":              "rose-pine",        // warm creative meta-agent
 	"pure-focus":         "everforest",       // calm, distraction-free
 	"purpose-gate":       "tokyo-night",      // intentional, sharp focus
 	"session-replay":     "catppuccin-mocha", // soft, reflective history
-	"editor":             "cyberpunk",        // editor subagents
+	"editor":             "cyberpunk",        // legacy editor subagents
+	"worker":             "cyberpunk",        // worker subagents
 	"subagent-widget":    "cyberpunk",        // legacy name
 	"system-select":      "catppuccin-mocha", // soft selection UI
 	"theme-cycler":       "synthwave",        // neon, it's a theme tool
@@ -95,10 +97,10 @@ export function applyExtensionTheme(fileUrl: string, ctx: ExtensionContext): boo
  * Read process.argv to find the first -e / --extension flag value.
  *
  * When Pi is launched as:
- *   pi -e extensions/editor -e extensions/pure-focus.ts
+ *   pi -e extensions/worker -e extensions/pure-focus.ts
  *
  * process.argv contains those paths verbatim. Every stacked extension calls
- * this and gets the same answer ("editor"), so all setTitle calls
+ * this and gets the same answer ("worker"), so all setTitle calls
  * are idempotent — no shared state or deduplication needed.
  *
  * Returns null if no -e flag is present (e.g. plain `pi` with no extensions).

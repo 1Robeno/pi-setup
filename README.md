@@ -10,6 +10,8 @@ Shared publicly as a reference. Take whatever's useful.
 
 ```
 extensions/
+  director/        — verifier/delegator mode for the main GPT-5.5 agent
+  worker/          — native Pi SDK background workers with coding, bash, and Exa tools
   oracle/          — Codex (gpt-5.4, xhigh reasoning) as a read-only second opinion
   explorer/        — Cursor agent (composer-2.5-fast) for deep codebase navigation
   planner/         — Codex (gpt-5.5, high reasoning) to write structured plans to disk
@@ -23,6 +25,29 @@ AGENTS.md          — Standing instructions injected into every session
 ---
 
 ## Extensions
+
+### director
+
+Turns the main agent into a director/verifier. In strict mode, the main agent gets only `bash` plus specialist tools (`explorer`, `planner`, `oracle`, worker controls, and Linear). It delegates execution to workers and verifies results before answering.
+
+```
+Model:     gpt-5.5
+Reasoning: high
+Command:   /director strict|advisory|off
+Load with: pi -e extensions/director
+```
+
+### worker
+
+Spawns native Pi SDK background workers with persistent sessions and live widgets. Workers can read/search/edit/write, run bash, and use Exa web/code search tools when available.
+
+```
+Model:     gpt-5.5
+Reasoning: medium
+Commands:  /worker, /workercont, /workerrm, /workerclear, /workers
+Aliases:   /sub, /subcont, /subrm, /subclear, /sublist
+Load with: pi -e extensions/worker
+```
 
 ### oracle
 
@@ -107,7 +132,7 @@ git clone <repo-url> ~/.pi/agent
 Load extensions at startup:
 
 ```sh
-pi -e extensions/oracle -e extensions/explorer -e extensions/planner -e extensions/exa -e extensions/linear -e extensions/minimal
+pi -e extensions/director -e extensions/worker -e extensions/oracle -e extensions/explorer -e extensions/planner -e extensions/exa -e extensions/linear -e extensions/minimal
 ```
 
 Or add them to your Pi launch alias/config.
