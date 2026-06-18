@@ -346,9 +346,13 @@ export default function (pi: ExtensionAPI) {
 				try {
 					pi.sendMessage({
 						customType: CUSTOM_RESULT_TYPE,
-						content: `Worker #${state.id}${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} ${statusLabel} task:\n${prompt}\n\nSession: ${state.sessionFile}\nTools used: ${state.toolCount}\nElapsed: ${Math.round(state.elapsed / 1000)}s\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
+						content: `Result:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
 						display: true,
-						details: toPersisted(state),
+						details: {
+							...toPersisted(state),
+							statusLabel,
+							prompt,
+						},
 					}, { deliverAs: "followUp", triggerTurn: true });
 				} catch {
 					// Runtime may be stale during shutdown/reload.
