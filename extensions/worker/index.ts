@@ -33,6 +33,8 @@ interface PersistedSubState {
 	sessionFile: string;
 	turnCount: number;
 	updatedAt: number;
+	modelId?: string;
+	thinkingLevel?: string;
 }
 
 type NativeAgentSession = Awaited<ReturnType<typeof createAgentSession>>["session"];
@@ -52,6 +54,8 @@ const CUSTOM_STATE_TYPE = "native-worker-state";
 const CUSTOM_RESULT_TYPE = "native-worker-result";
 const WORKER_MODEL_ID = "gpt-5.5";
 const WORKER_THINKING = "medium";
+const COMMIT_WORKER_MODEL_ID = "gpt-5.4-mini";
+const COMMIT_WORKER_THINKING = "low";
 const WORKER_EXTENSION_PATHS = [path.join(getAgentDir(), "extensions", "exa")];
 const WORKER_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls", "exa_search", "exa_code", "exa_fetch"];
 
@@ -64,6 +68,44 @@ Your job:
 - Use bash responsibly: inspect first, run relevant checks when practical, and avoid destructive commands unless explicitly necessary.
 - Do not ask the user questions unless the task is impossible without clarification.
 - Keep your final response concise: list files changed, checks run, and anything the main model must know.`;
+
+const COMMIT_MESSAGE_GUIDELINES = `You are an expert at writing Git commits. Your job is to write a short clear commit message that summarizes the changes.
+
+If you can accurately express the change in just the subject line, don't include anything in the message body. Only use the body when it is providing useful information.
+
+Don't repeat information from the subject line in the commit message body.
+
+Only use the commit message as the git commit message. Do not include any additional meta-commentary about the task. Do not include the raw diff output in the commit message.
+
+Follow good Git style:
+- Separate the subject from the body with a blank line.
+- Try to limit the subject line to 50 characters.
+- Capitalize the subject line.
+- Do not end the subject line with any punctuation.
+- Use the imperative mood in the subject line.
+- Wrap the body at 72 characters.
+- Keep the body short and concise; omit it entirely if not useful.`;
+
+function makeCommitTask(extraGuidelines?: string): string {
+	const additionalGuidelines = extraGuidelines?.trim()
+		? `\n\nAdditional user-supplied commit-message guidance:\n${extraGuidelines.trim()}`
+		: "";
+
+	return `Commit the current repository changes on the current branch and push them to the matching remote branch.
+
+You are running in a fresh Pi worker session. Do not rely on the parent conversation context.
+
+Workflow:
+1. Inspect repository state with git status, current branch, upstream tracking branch, remotes, and recent commit style.
+2. Inspect all current changes, including staged, unstaged, and untracked files. Do not edit source files unless required only to recover from a failed git operation.
+3. Decide whether the change set should be one commit or multiple commits. Prefer one commit for one coherent change. Use multiple commits only when there are clearly independent logical changes that should be reviewed/reverted separately.
+4. For each commit, stage only the files/hunks that belong to that logical unit, then commit it.
+5. Commit-message guidelines:
+${COMMIT_MESSAGE_GUIDELINES}${additionalGuidelines}
+6. Push the resulting commit(s) from the current branch to its upstream remote branch. If no upstream is configured, push to origin using the current branch name and set upstream.
+7. If there are no changes to commit, do not create an empty commit; report that clearly.
+8. Final response: summarize commit SHA(s), commit message(s), push target, and any verification or warnings.`;
+}
 
 function makeSubagentSessionDir(): string {
 	return path.join(os.homedir(), ".pi", "agent", "sessions", "native-workers");
@@ -80,6 +122,8 @@ function toPersisted(state: SubState): PersistedSubState {
 		sessionFile: state.sessionFile,
 		turnCount: state.turnCount,
 		updatedAt: Date.now(),
+		modelId: state.modelId,
+		thinkingLevel: state.thinkingLevel,
 	};
 }
 
@@ -97,11 +141,11 @@ function extractMessageText(message: any): string {
 		.join("");
 }
 
-function resolveSubagentModel(ctx: ExtensionContext): Model<any> | undefined {
+function resolveSubagentModel(ctx: ExtensionContext, modelId = WORKER_MODEL_ID): Model<any> | undefined {
 	return (
-		ctx.modelRegistry.find("openai-codex", WORKER_MODEL_ID) ??
-		ctx.modelRegistry.find("openai", WORKER_MODEL_ID) ??
-		ctx.modelRegistry.getAll().find((model) => model.id === WORKER_MODEL_ID)
+		ctx.modelRegistry.find("openai-codex", modelId) ??
+		ctx.modelRegistry.find("openai", modelId) ??
+		ctx.modelRegistry.getAll().find((model) => model.id === modelId)
 	);
 }
 
@@ -199,8 +243,10 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	async function createSdkSession(state: SubState, ctx: ExtensionContext): Promise<NativeAgentSession> {
-		const model = resolveSubagentModel(ctx);
-		if (!model) throw new Error(`Could not find model ${WORKER_MODEL_ID}. Check Pi model configuration.`);
+		const modelId = state.modelId ?? WORKER_MODEL_ID;
+		const thinkingLevel = state.thinkingLevel ?? WORKER_THINKING;
+		const model = resolveSubagentModel(ctx, modelId);
+		if (!model) throw new Error(`Could not find model ${modelId}. Check Pi model configuration.`);
 
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: ctx.cwd,
@@ -222,7 +268,7 @@ export default function (pi: ExtensionAPI) {
 			cwd: ctx.cwd,
 			agentDir: getAgentDir(),
 			model,
-			thinkingLevel: WORKER_THINKING,
+			thinkingLevel,
 			authStorage: ctx.modelRegistry.authStorage,
 			modelRegistry: ctx.modelRegistry,
 			resourceLoader,
@@ -311,7 +357,12 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function startAgent(task: string, ctx: ExtensionContext, existing?: SubState): SubState {
+	function startAgent(
+		task: string,
+		ctx: ExtensionContext,
+		existing?: SubState,
+		options: { modelId?: string; thinkingLevel?: string } = {},
+	): SubState {
 		widgetCtx = ctx;
 		const state: SubState = existing ?? {
 			id: nextId++,
@@ -332,6 +383,8 @@ export default function (pi: ExtensionAPI) {
 		state.textChunks = [];
 		state.toolCount = 0;
 		state.elapsed = 0;
+		state.modelId = options.modelId ?? state.modelId ?? WORKER_MODEL_ID;
+		state.thinkingLevel = options.thinkingLevel ?? state.thinkingLevel ?? WORKER_THINKING;
 		state.updatedAt = Date.now();
 		agents.set(state.id, state);
 		persistSnapshot();
@@ -365,7 +418,7 @@ export default function (pi: ExtensionAPI) {
 		execute: async (_callId, args, _signal, _onUpdate, ctx) => {
 			const state = startAgent(args.task, ctx);
 			return {
-				content: [{ type: "text", text: `Worker #${state.id} spawned with ${WORKER_MODEL_ID}:${WORKER_THINKING}. It can use ${WORKER_TOOLS.join(", ")}.` }],
+				content: [{ type: "text", text: `Worker #${state.id} spawned with ${state.modelId ?? WORKER_MODEL_ID}:${state.thinkingLevel ?? WORKER_THINKING}. It can use ${WORKER_TOOLS.join(", ")}.` }],
 				details: toPersisted(state),
 				terminate: true,
 			};
@@ -485,6 +538,18 @@ export default function (pi: ExtensionAPI) {
 			total === 0 ? "info" : "success",
 		);
 	}
+
+	pi.registerCommand("commit", {
+		description: "Commit current changes and push using a fresh low-reasoning gpt-5.4-mini worker",
+		handler: async (args, ctx) => {
+			widgetCtx = ctx;
+			const state = startAgent(makeCommitTask(args), ctx, undefined, {
+				modelId: COMMIT_WORKER_MODEL_ID,
+				thinkingLevel: COMMIT_WORKER_THINKING,
+			});
+			ctx.ui.notify(`Commit worker #${state.id} started with ${COMMIT_WORKER_MODEL_ID}:${COMMIT_WORKER_THINKING}.`, "info");
+		},
+	});
 
 	pi.registerCommand("worker", {
 		description: "Spawn a worker with live widget: /worker <task>",
