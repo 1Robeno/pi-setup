@@ -1,6 +1,6 @@
 # pi-agent
 
-Personal harness for the [Pi coding agent](https://earendil.works) — a set of extensions that plug other coding CLIs (Codex, Cursor) into Pi as callable subagents, plus UI tweaks and tool integrations I use daily.
+Personal harness for the [Pi coding agent](https://earendil.works) — a set of extensions that plug coding CLIs (Codex) into Pi as callable subagents, plus UI tweaks and tool integrations I use daily.
 
 Shared publicly as a reference. Take whatever's useful.
 
@@ -13,7 +13,7 @@ extensions/
   director/        — verifier/delegator mode for the main GPT-5.5 agent
   worker/          — native Pi SDK background workers with coding, bash, and Exa tools
   oracle/          — Codex (gpt-5.4, xhigh reasoning) as a read-only second opinion
-  explorer/        — Cursor agent (composer-2.5-fast) for deep codebase navigation
+  explorer/        — Codex (gpt-5.5, low reasoning) for deep codebase navigation
   planner/         — Codex (gpt-5.5, high reasoning) to write structured plans to disk
   exa/             — Web search and fetch tools via the Exa API
   linear/          — Linear GraphQL tools for teams, issues, comments, and raw queries
@@ -65,13 +65,14 @@ Load with: pi -e extensions/oracle
 
 ### explorer
 
-Invokes the Cursor `agent` CLI for codebase navigation tasks — tracing call stacks, finding definitions, mapping dependencies.
+Invokes `codex exec` for codebase navigation tasks — tracing call stacks, finding definitions, mapping dependencies.
 
-The explorer runs shell commands freely (`rg`, `fd`, `git log`, `git blame`, etc.) and returns dense, precise output (file paths, line numbers, quotes) back to Pi. It never writes files.
+The explorer runs in a Codex read-only sandbox, uses shell commands for inspection (`rg`, `fd`, `git log`, `git blame`, etc.), and returns dense, precise output (file paths, line numbers, quotes) back to Pi. It never writes files.
 
 ```
-Model:     composer-2.5-fast
-Sandbox:   read-only (by instruction)
+Model:     gpt-5.5
+Reasoning: low
+Sandbox:   read-only
 Load with: pi -e extensions/explorer
 ```
 
@@ -122,7 +123,7 @@ Load with: pi -e extensions/minimal
 
 ## Setup
 
-**Prerequisites**: Pi coding agent, `bun`, `codex` CLI, Cursor `agent` CLI, `EXA_API_KEY`, optional `LINEAR_API_KEY`.
+**Prerequisites**: Pi coding agent, `bun`, `codex` CLI, `EXA_API_KEY`, optional `LINEAR_API_KEY`.
 
 Clone into `~/.pi/agent` (Pi's default agent directory):
 

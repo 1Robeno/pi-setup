@@ -24,7 +24,7 @@ type ExplorerToolDeps = {
 	formatDuration: (ms: number) => string;
 	hasActiveExplorer: () => boolean;
 	cancelActiveExplorer: () => void;
-	runCursorExplorer: (
+	runCodexExplorer: (
 		params: ExplorerParams,
 		cwd: string,
 		signal: AbortSignal | undefined,
@@ -52,7 +52,7 @@ export function registerExplorerTool(pi: ExtensionAPI, deps: ExplorerToolDeps) {
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			return await withExplorerUi(ctx, params.query, deps.formatDuration, async (ui) => {
 				try {
-					const result = await deps.runCursorExplorer(params, ctx.cwd, signal, ui.update);
+					const result = await deps.runCodexExplorer(params, ctx.cwd, signal, ui.update);
 
 					ui.finish("done", `Completed in ${deps.formatDuration(result.durationMs)}.`);
 					ui.clear();

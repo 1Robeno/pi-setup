@@ -4,13 +4,15 @@ export type ExplorerParams = {
 	paths?: string[];
 };
 
-export const MODEL = "composer-2.5-fast";
+export const MODEL = "gpt-5.5";
+export const REASONING = "low";
+export const SANDBOX = "read-only";
 
 export function buildPrompt(params: ExplorerParams, cwd: string): string {
 	const paths = params.paths?.filter(Boolean) ?? [];
 	return `You are the explorer — you navigate codebases to find, trace, and explain.
 
-Use shell commands freely: rg, fd, find, ls, dir, cat, type, git log, git diff, git blame, git show. Follow the data. Trace the call stack. Read what the code actually says, not what it seems to say.
+Use read-only shell commands freely: rg, fd, find, ls, dir, cat, type, git log, git diff, git blame, git show. Follow the data. Trace the call stack. Read what the code actually says, not what it seems to say. Do not edit, write, delete, or mutate files.
 
 Surface the non-obvious: implicit contracts, hidden dependencies, silent assumptions, the gap between what the author intended and what the code does. Quote the code you find — file path and line. No speculation beyond what's there.
 

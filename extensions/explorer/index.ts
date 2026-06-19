@@ -1,7 +1,7 @@
 /**
- * Explorer — read-only Cursor agent (composer-2.5-fast) for deep codebase navigation.
+ * Explorer — read-only Codex exec agent (gpt-5.5 low reasoning) for deep codebase navigation.
  *
- * Runs shell commands to trace flows, find definitions, and map structure.
+ * Runs in a Codex read-only sandbox to trace flows, find definitions, and map structure.
  * Never writes files. Green theme.
  *
  * Load with: `pi -e extensions/explorer`
