@@ -81,8 +81,6 @@ function makeCommitTask(messageArg?: string): string {
 
 	return `Commit the current repository changes.
 
-You are running in a fresh dedicated Pi commit-worker session. Do not rely on the parent conversation context, parent model, or previous chat history.
-
 Provided commit message argument, if any:
 \`\`\`text
 ${providedMessage}
@@ -91,7 +89,7 @@ ${providedMessage}
 Behavior:
 - If the provided commit message argument above is non-empty, use it as the commit message.
 - If the provided commit message argument above is empty, auto-generate the commit message from the git diff.
-- Do not push unless I explicitly ask in a separate instruction outside this slash command.
+- Always push to current branch.
 - Do not make unrelated code edits.
 - Do not include raw diff output in the final response.
 
@@ -103,7 +101,7 @@ Procedure:
    - staged/working file summary as needed
    - staged diff if changes are already staged, otherwise working-tree diff
 4. Stage the intended changes using the same broad behavior as a normal quick commit: \`git add -A\`.
-5. If no commit message was provided, build the commit message using this T3Code-style prompt setup:
+5. If no commit message was provided, build the commit message using this prompt setup:
 
 \`\`\`text
 ${COMMIT_MESSAGE_GUIDELINES}
