@@ -54,7 +54,7 @@ const CUSTOM_STATE_TYPE = "native-worker-state";
 const CUSTOM_RESULT_TYPE = "native-worker-result";
 const WORKER_MODEL_ID = "gpt-5.5";
 const WORKER_THINKING = "medium";
-const COMMIT_WORKER_MODEL_ID = "gpt-5.4-mini";
+const COMMIT_WORKER_MODEL_ID = "gpt-5.5";
 const COMMIT_WORKER_THINKING = "low";
 const WORKER_EXTENSION_PATHS = [path.join(getAgentDir(), "extensions", "exa")];
 const WORKER_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls", "exa_search", "exa_code", "exa_fetch"];
@@ -69,42 +69,61 @@ Your job:
 - Do not ask the user questions unless the task is impossible without clarification.
 - Keep your final response concise: list files changed, checks run, and anything the main model must know.`;
 
-const COMMIT_MESSAGE_GUIDELINES = `You are an expert at writing Git commits. Your job is to write a short clear commit message that summarizes the changes.
+const COMMIT_MESSAGE_GUIDELINES = `You write concise git commit messages.
+Return a JSON object with keys: subject, body.
+Rules:
+- subject must be imperative, <= 72 chars, and no trailing period
+- body can be empty string or short bullet points
+- capture the primary user-visible or developer-visible change`;
 
-If you can accurately express the change in just the subject line, don't include anything in the message body. Only use the body when it is providing useful information.
+function makeCommitTask(messageArg?: string): string {
+	const providedMessage = messageArg?.trim() ?? "";
 
-Don't repeat information from the subject line in the commit message body.
+	return `Commit the current repository changes.
 
-Only use the commit message as the git commit message. Do not include any additional meta-commentary about the task. Do not include the raw diff output in the commit message.
+You are running in a fresh dedicated Pi commit-worker session. Do not rely on the parent conversation context, parent model, or previous chat history.
 
-Follow good Git style:
-- Separate the subject from the body with a blank line.
-- Try to limit the subject line to 50 characters.
-- Capitalize the subject line.
-- Do not end the subject line with any punctuation.
-- Use the imperative mood in the subject line.
-- Wrap the body at 72 characters.
-- Keep the body short and concise; omit it entirely if not useful.`;
+Provided commit message argument, if any:
+\`\`\`text
+${providedMessage}
+\`\`\`
 
-function makeCommitTask(extraGuidelines?: string): string {
-	const additionalGuidelines = extraGuidelines?.trim()
-		? `\n\nAdditional user-supplied commit-message guidance:\n${extraGuidelines.trim()}`
-		: "";
+Behavior:
+- If the provided commit message argument above is non-empty, use it as the commit message.
+- If the provided commit message argument above is empty, auto-generate the commit message from the git diff.
+- Do not push unless I explicitly ask in a separate instruction outside this slash command.
+- Do not make unrelated code edits.
+- Do not include raw diff output in the final response.
 
-	return `Commit the current repository changes on the current branch and push them to the matching remote branch.
+Procedure:
+1. Inspect the git state with \`git status --short --branch\`.
+2. If there are no changes to commit, do not create an empty commit; report that clearly.
+3. If no commit message was provided, collect commit context:
+   - current branch: \`git branch --show-current\`
+   - staged/working file summary as needed
+   - staged diff if changes are already staged, otherwise working-tree diff
+4. Stage the intended changes using the same broad behavior as a normal quick commit: \`git add -A\`.
+5. If no commit message was provided, build the commit message using this T3Code-style prompt setup:
 
-You are running in a fresh Pi worker session. Do not rely on the parent conversation context.
+\`\`\`text
+${COMMIT_MESSAGE_GUIDELINES}
 
-Workflow:
-1. Inspect repository state with git status, current branch, upstream tracking branch, remotes, and recent commit style.
-2. Inspect all current changes, including staged, unstaged, and untracked files. Do not edit source files unless required only to recover from a failed git operation.
-3. Decide whether the change set should be one commit or multiple commits. Prefer one commit for one coherent change. Use multiple commits only when there are clearly independent logical changes that should be reviewed/reverted separately.
-4. For each commit, stage only the files/hunks that belong to that logical unit, then commit it.
-5. Commit-message guidelines:
-${COMMIT_MESSAGE_GUIDELINES}${additionalGuidelines}
-6. Push the resulting commit(s) from the current branch to its upstream remote branch. If no upstream is configured, push to origin using the current branch name and set upstream.
-7. If there are no changes to commit, do not create an empty commit; report that clearly.
-8. Final response: summarize commit SHA(s), commit message(s), push target, and any verification or warnings.`;
+Branch: <current branch or (detached)>
+
+Staged files:
+<git diff --cached --name-status>
+
+Staged patch:
+<git diff --no-ext-diff --cached --patch --minimal>
+\`\`\`
+
+6. Convert the generated JSON into a normal git message:
+   - Use \`subject\` as the first \`-m\` argument.
+   - If \`body\` is non-empty, use it as a second \`-m\` argument.
+   - Sanitize the subject: single line, trimmed, no trailing period, max 72 chars.
+   - If generation fails or the subject is empty, use \`Update project files\`.
+7. Run \`git commit -m "$subject"\` and add \`-m "$body"\` only when the body is non-empty. If a commit message argument was provided, use that message instead.
+8. Report the commit SHA and final commit message.`;
 }
 
 function makeSubagentSessionDir(): string {
@@ -544,7 +563,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	pi.registerCommand("commit", {
-		description: "Commit current changes and push using a fresh low-reasoning gpt-5.4-mini worker",
+		description: "Commit current changes using a fresh dedicated gpt-5.5:low worker",
 		handler: async (args, ctx) => {
 			widgetCtx = ctx;
 			const state = startAgent(makeCommitTask(args), ctx, undefined, {

@@ -1,8 +1,8 @@
 /**
- * Planner — GPT-5.5 high-reasoning plan generator.
+ * Planner — GPT-5.5 high-reasoning Linear plan generator.
  *
- * Reads full session context, produces a detailed markdown plan,
- * writes it to .docs/plans/MMDD_<name>.md. Blue theme.
+ * Reads full session context, asks Codex to create a detailed plan as a Linear
+ * issue via the configured Linear MCP server. Blue theme.
  *
  * Load with: `pi -e extensions/planner`
  */

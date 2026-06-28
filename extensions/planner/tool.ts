@@ -8,7 +8,7 @@ const PLANNER_PARAMS = Type.Object({
 		description: "Planning request with goal, scope, constraints, and any important files.",
 	}),
 	title: Type.Optional(Type.String({
-		description: "Short, subject-specific plan title used for the filename, e.g. 'auth-migration' or 'dashboard-redesign'.",
+		description: "Short, subject-specific Linear issue title, e.g. 'Auth migration plan' or 'Dashboard redesign plan'.",
 	})),
 });
 
@@ -19,7 +19,7 @@ type PlannerToolDeps = {
 	runCodexPlanner: (
 		sessionContext: string,
 		task: string,
-		planPath: string,
+		issueTitle: string | undefined,
 		cwd: string,
 		signal: AbortSignal | undefined,
 		onProgress: (text: string) => void,
@@ -56,31 +56,6 @@ function serializeSession(ctx: any): string {
 		.join("\n\n---\n\n");
 }
 
-const FALLBACK_WORDS = [
-	"amber", "brisk", "clear", "delta", "ember", "frost", "harbor", "lunar",
-	"maple", "nova", "onyx", "prairie", "quartz", "river", "signal", "summit",
-];
-
-function randomFallbackSlug(): string {
-	return Array.from({ length: 3 }, () => FALLBACK_WORDS[Math.floor(Math.random() * FALLBACK_WORDS.length)]).join("-");
-}
-
-function slugify(text: string): string {
-	return text
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 35)
-		.replace(/-+$/g, "");
-}
-
-function generatePlanPath(title?: string): string {
-	const now = new Date();
-	const mmdd = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-	const slug = title ? slugify(title) : randomFallbackSlug();
-	return `.docs/plans/${mmdd}_${slug || randomFallbackSlug()}.md`;
-}
-
 export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 	registerPlannerUi(pi, deps.hasActivePlanner, deps.cancelActivePlanner);
 
@@ -88,12 +63,12 @@ export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 		name: "planner",
 		label: "Planner",
 		description:
-			"Write an implementation plan to `.docs/plans/`. Reads the current session automatically. Use when the user wants a written plan, design doc, or architecture breakdown.",
+			"Create an implementation plan as a Linear issue through Codex's Linear MCP. Reads the current session automatically. Use when the user wants a written plan, design doc, or architecture breakdown.",
 		promptSnippet:
-			"Create a plan from the current session. Pass the goal, scope, constraints, important files, and a short subject-specific title for the filename.",
+			"Create a Linear issue plan from the current session. Pass the goal, scope, constraints, important files, and a short subject-specific issue title.",
 		promptGuidelines: [
 			"Use planner when the plan itself is the deliverable.",
-			"Pass a focused task with the goal, scope, constraints, important files, title for the filename, e.g. 'auth-migration' or 'dashboard-redesign'.",
+			"Pass a focused task with the goal, scope, constraints, important files, title for the Linear issue, e.g. 'Auth migration plan' or 'Dashboard redesign plan'.",
 			"Do not repeat session history; full session context is read automatically.",
 		],
 		parameters: PLANNER_PARAMS,
@@ -101,22 +76,21 @@ export function registerPlannerTool(pi: ExtensionAPI, deps: PlannerToolDeps) {
 			return await withPlannerUi(ctx, params.task, deps.formatDuration, async (ui) => {
 				try {
 					const sessionContext = serializeSession(ctx);
-					const planPath = generatePlanPath(params.title);
 
 					const result = await deps.runCodexPlanner(
 						sessionContext,
 						params.task,
-						planPath,
+						params.title,
 						ctx.cwd,
 						signal,
 						ui.update,
 					);
 
-					ui.finish("done", `Saved to ${result.planPath}`);
+					ui.finish("done", `Created ${result.issueIdentifier}`);
 					ui.clear();
 
 					return {
-						content: [{ type: "text", text: `Plan saved to ${result.planPath}\n\n${result.answer}` }],
+						content: [{ type: "text", text: `Plan created in Linear:\n${result.answer}` }],
 						details: { ...result },
 					};
 				} catch (error) {
